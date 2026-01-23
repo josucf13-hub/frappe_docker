@@ -1,8 +1,9 @@
 version: '3.7'
 
 x-customizable-image: &customizable_image
-  image: ${CUSTOM_IMAGE:-seu-usuario/frappe-only}:${CUSTOM_TAG:-15}
-  pull_policy: ${PULL_POLICY:-always}
+  # Usar imagem oficial do Frappe (sem ERPNext)
+  image: frappe/frappe:v15.44.1
+  pull_policy: always
   restart: unless-stopped
 
 x-depends-on-configurator: &depends_on_configurator
@@ -16,7 +17,7 @@ x-backend-defaults: &backend_defaults
     - sites:/home/frappe/frappe-bench/sites
 
 services:
-  # Banco de Dados
+  # Database
   mariadb:
     image: mariadb:10.6
     restart: unless-stopped
@@ -29,6 +30,10 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
     volumes:
       - db-data:/var/lib/mysql
+    healthcheck:
+      test: mysqladmin ping -h localhost --password=${DB_PASSWORD}
+      interval: 1s
+      retries: 15
 
   # Redis Cache
   redis-cache:
@@ -46,7 +51,7 @@ services:
 
   # Configurator
   configurator:
-    <<: *backend_defaults
+    <<: *customizable_image
     entrypoint:
       - bash
       - -c
@@ -60,11 +65,13 @@ services:
         bench set-config -g redis_socketio "redis://$$REDIS_QUEUE";
         bench set-config -gp socketio_port $$SOCKETIO_PORT;
     environment:
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      REDIS_CACHE: ${REDIS_CACHE}
-      REDIS_QUEUE: ${REDIS_QUEUE}
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      REDIS_CACHE: ${REDIS_CACHE:-redis-cache:6379}
+      REDIS_QUEUE: ${REDIS_QUEUE:-redis-queue:6379}
       SOCKETIO_PORT: 9000
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
     depends_on:
       mariadb:
         condition: service_healthy
@@ -86,12 +93,12 @@ services:
     environment:
       BACKEND: backend:8000
       SOCKETIO: websocket:9000
-      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME_HEADER}
-      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
-      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
-      UPSTREAM_REAL_IP_RECURSIVE: off
-      PROXY_READ_TIMEOUT: 120
-      CLIENT_MAX_BODY_SIZE: 50m
+      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME_HEADER:-$$host}
+      UPSTREAM_REAL_IP_ADDRESS: ${UPSTREAM_REAL_IP_ADDRESS:-127.0.0.1}
+      UPSTREAM_REAL_IP_HEADER: ${UPSTREAM_REAL_IP_HEADER:-X-Forwarded-For}
+      UPSTREAM_REAL_IP_RECURSIVE: ${UPSTREAM_REAL_IP_RECURSIVE:-off}
+      PROXY_READ_TIMEOUT: ${PROXY_READ_TIMEOUT:-120}
+      CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-50m}
     volumes:
       - sites:/home/frappe/frappe-bench/sites
     depends_on:
