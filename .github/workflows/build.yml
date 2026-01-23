@@ -35,7 +35,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./images/layered/Containerfile
+          file: ./images/custom/Containerfile
           push: true
           tags: |
             ghcr.io/josue693/frappe-only:15
